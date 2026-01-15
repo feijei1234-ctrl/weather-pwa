@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>云景天气 | CloudView Weather</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="精美的天气预报应用">
+    <meta name="theme-color" content="#667eea">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="云景天气">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"', 'sans-serif'],
+                    },
+                    colors: {
+                        glass: "rgba(255, 255, 255, 0.2)",
+                        glassBorder: "rgba(255, 255, 255, 0.3)",
+                        glassText: "rgba(255, 255, 255, 0.9)",
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+            transition: background 0.8s ease;
+        }
+
+        /* 玻璃拟态卡片样式 */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+
+        .glass-input {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        .glass-input::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+
+        .weather-icon-anim {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* 滚动条隐藏但保留功能 */
+        .hide-scroll::-webkit-scrollbar {
+            display: none;
+        }
+        .hide-scroll {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        
+        /* 简单淡入动画 */
+        .fade-in {
+            animation: fadeIn 0.5s ease-out forwards;
+            opacity: 0;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+
+    <!-- 主容器 -->
+    <div class="glass-panel w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row min-h-[600px] relative">
+        
+        <!-- 左侧面板：搜索与主要信息 -->
+        <div class="w-full md:w-2/5 p-8 flex flex-col justify-between relative z-10 bg-black/10 md:bg-transparent">
+            
+            <!-- 搜索栏 -->
+            <div class="relative">
+                <input type="text" id="city-input" placeholder="输入城市 (如: 北京)" 
+                    class="glass-input w-full rounded-full py-3 pl-4 pr-12 outline-none focus:bg-white/20 transition-all">
+                <button onclick="handleSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white/20 rounded-full transition-colors">
+                    <i data-lucide="search" class="w-5 h-5 text-white"></i>
+                </button>
+            </div>
+
+            <!-- 默认/错误提示 -->
+            <div id="loading-msg" class="hidden mt-4 text-center text-sm animate-pulse flex items-center justify-center gap-2">
+                <span class="inline-block w-2 h-2 bg-white rounded-full animate-bounce"></span>
+                正在获取实时数据...
+            </div>
+            <div id="error-msg" class="hidden mt-4 text-center text-sm text-red-200 bg-red-500/20 py-2 rounded-lg border border-red-500/30"></div>
+
+            <!-- 主要天气展示 -->
+            <div id="main-weather" class="flex flex-col items-center mt-8 md:mt-0 fade-in hidden">
+                <div id="weather-icon-container" class="weather-icon-anim mb-4">
+                    <!-- Icon injected via JS -->
+                </div>
+                <h1 id="temp-display" class="text-7xl font-bold tracking-tighter">--°</h1>
+                <p id="weather-desc" class="text-xl mt-2 font-medium opacity-90">--</p>
+                <div class="h-px w-16 bg-white/30 my-6"></div>
+                <div class="text-center">
+                    <h2 id="city-display" class="text-2xl font-bold">--</h2>
+                    <p id="date-display" class="text-sm opacity-75 mt-1">--</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧面板：详情与预报 -->
+        <div class="w-full md:w-3/5 p-8 bg-black/20 flex flex-col justify-between">
+            
+            <!-- 天气详情网格 -->
+            <div class="mb-8 fade-in" style="animation-delay: 0.1s;">
+                <h3 class="uppercase text-sm font-bold tracking-widest mb-4 opacity-70">今日详情</h3>
+                <div class="grid grid-cols-2 gap-4">
+                    <!-- 湿度 -->
+                    <div class="glass-panel p-4 rounded-xl flex items-center space-x-3 hover:bg-white/10 transition-colors">
+                        <i data-lucide="droplets" class="w-6 h-6 text-blue-300"></i>
+                        <div>
+                            <p class="text-xs opacity-60">湿度</p>
+                            <p id="humidity-display" class="text-lg font-bold">--%</p>
+                        </div>
+                    </div>
+                    <!-- 风速 -->
+                    <div class="glass-panel p-4 rounded-xl flex items-center space-x-3 hover:bg-white/10 transition-colors">
+                        <i data-lucide="wind" class="w-6 h-6 text-gray-300"></i>
+                        <div>
+                            <p class="text-xs opacity-60">风速</p>
+                            <p id="wind-display" class="text-lg font-bold">-- km/h</p>
+                        </div>
+                    </div>
+                    <!-- 体感温度 -->
+                    <div class="glass-panel p-4 rounded-xl flex items-center space-x-3 hover:bg-white/10 transition-colors">
+                        <i data-lucide="thermometer" class="w-6 h-6 text-red-300"></i>
+                        <div>
+                            <p class="text-xs opacity-60">体感</p>
+                            <p id="feels-like-display" class="text-lg font-bold">--°</p>
+                        </div>
+                    </div>
+                    <!-- 能见度 -->
+                    <div class="glass-panel p-4 rounded-xl flex items-center space-x-3 hover:bg-white/10 transition-colors">
+                        <i data-lucide="eye" class="w-6 h-6 text-purple-300"></i>
+                        <div>
+                            <p class="text-xs opacity-60">能见度</p>
+                            <p id="visibility-display" class="text-lg font-bold">-- km</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 未来预报 -->
+            <div class="fade-in" style="animation-delay: 0.2s;">
+                <h3 class="uppercase text-sm font-bold tracking-widest mb-4 opacity-70">未来预报</h3>
+                <div id="forecast-container" class="flex space-x-4 overflow-x-auto hide-scroll pb-2">
+                    <!-- 预报卡片将通过 JS 插入 -->
+                    <div class="text-sm opacity-50 p-2">请输入城市获取预报</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 逻辑 -->
+    <script>
+        // 初始化图标
+        lucide.createIcons();
+
+        // 天气类型定义与 WMO 代码映射
+        // WMO Codes 参考: https://open-meteo.com/en/docs
+        const weatherTypes = {
+            sunny: { codes: [0, 1], desc: "晴朗", icon: "sun", color: "text-yellow-300", bg: "linear-gradient(135deg, #f6d365 0%, #fda085 100%)" },
+            cloudy: { codes: [2, 3, 45, 48], desc: "多云/阴", icon: "cloud-sun", color: "text-gray-200", bg: "linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)" },
+            drizzle: { codes: [51, 53, 55, 56, 57], desc: "小雨", icon: "cloud-drizzle", color: "text-blue-300", bg: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)" },
+            rain: { codes: [61, 63, 65, 66, 67, 80, 81, 82], desc: "下雨", icon: "cloud-rain", color: "text-blue-400", bg: "linear-gradient(135deg, #2b5876 0%, #4e4376 100%)" },
+            snow: { codes: [71, 73, 75, 77, 85, 86], desc: "下雪", icon: "snowflake", color: "text-cyan-200", bg: "linear-gradient(135deg, #83a4d4 0%, #b6fbff 100%)" },
+            thunder: { codes: [95, 96, 99], desc: "雷雨", icon: "cloud-lightning", color: "text-purple-400", bg: "linear-gradient(135deg, #141E30 0%, #243B55 100%)" },
+        };
+
+        // 获取 DOM 元素
+        const els = {
+            input: document.getElementById('city-input'),
+            loading: document.getElementById('loading-msg'),
+            error: document.getElementById('error-msg'),
+            mainWeather: document.getElementById('main-weather'),
+            temp: document.getElementById('temp-display'),
+            desc: document.getElementById('weather-desc'),
+            city: document.getElementById('city-display'),
+            date: document.getElementById('date-display'),
+            iconContainer: document.getElementById('weather-icon-container'),
+            humidity: document.getElementById('humidity-display'),
+            wind: document.getElementById('wind-display'),
+            feelsLike: document.getElementById('feels-like-display'),
+            visibility: document.getElementById('visibility-display'),
+            forecast: document.getElementById('forecast-container'),
+            body: document.body
+        };
+
+        // 监听回车键
+        els.input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') handleSearch();
+        });
+
+        // 页面加载时自动获取一次（默认北京）
+        window.onload = () => {
+            fetchWeatherData("北京");
+        };
+
+        // 获取天气类型对象
+        function getWeatherType(code) {
+            for (const key in weatherTypes) {
+                if (weatherTypes[key].codes.includes(code)) {
+                    return weatherTypes[key];
+                }
+            }
+            // 默认返回多云
+            return weatherTypes.cloudy;
+        }
+
+        async function handleSearch() {
+            const city = els.input.value.trim();
+            if (!city) return;
+            await fetchWeatherData(city);
+        }
+
+        async function fetchWeatherData(city) {
+            els.loading.classList.remove('hidden');
+            els.error.classList.add('hidden');
+            els.mainWeather.classList.add('hidden'); // 加载时隐藏旧数据
+
+            try {
+                // 1. 地理编码：将城市名转换为经纬度
+                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=zh&format=json`;
+                const geoRes = await fetch(geoUrl);
+                const geoData = await geoRes.json();
+
+                if (!geoData.results || geoData.results.length === 0) {
+                    throw new Error("未找到该城市，请检查拼写。");
+                }
+
+                const { latitude, longitude, name, admin1 } = geoData.results[0];
+                const displayName = admin1 ? `${name} (${admin1})` : name;
+
+                // 2. 获取天气数据
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
+                
+                const weatherRes = await fetch(weatherUrl);
+                const weatherData = await weatherRes.json();
+
+                // 3. 处理并更新 UI
+                updateWeatherUI(weatherData, displayName);
+
+            } catch (err) {
+                console.error(err);
+                els.error.textContent = err.message || "获取天气数据失败，请稍后重试。";
+                els.error.classList.remove('hidden');
+            } finally {
+                els.loading.classList.add('hidden');
+            }
+        }
+
+        function updateWeatherUI(data, cityName) {
+            const current = data.current;
+            const daily = data.daily;
+            const weatherType = getWeatherType(current.weather_code);
+
+            // 1. 更新背景
+            els.body.style.background = weatherType.bg;
+
+            // 2. 更新主要信息
+            els.city.textContent = cityName;
+            els.temp.textContent = `${Math.round(current.temperature_2m)}°`;
+            els.desc.textContent = weatherType.desc;
+            
+            // 格式化日期
+            const now = new Date();
+            const options = { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' };
+            els.date.textContent = now.toLocaleDateString('zh-CN', options);
+
+            // 更新图标
+            els.iconContainer.innerHTML = `<i data-lucide="${weatherType.icon}" class="w-24 h-24 ${weatherType.color}"></i>`;
+
+            // 3. 更新详情
+            els.humidity.textContent = `${current.relative_humidity_2m}%`;
+            els.wind.textContent = `${current.wind_speed_10m} km/h`;
+            els.feelsLike.textContent = `${Math.round(current.apparent_temperature)}°`;
+            
+            // Open-Meteo current API 默认不提供 visibility，我们根据天气代码粗略估算或隐藏
+            // 如果天气代码大于45（雾/雨），显示低能见度，否则显示良好
+            let visibility = "良好";
+            if(current.weather_code > 45) visibility = "一般";
+            if(current.weather_code === 45 || current.weather_code === 48) visibility = "较低";
+            els.visibility.textContent = visibility;
+
+            // 4. 更新预报卡片 (从索引1开始，因为索引0是今天)
+            els.forecast.innerHTML = '';
+            
+            // 取未来 5 天 (daily 数组通常包含今天，所以 slice(1, 6))
+            const forecastDays = daily.time.slice(1, 6);
+            
+            forecastDays.forEach((timeStr, index) => {
+                // 因为我们切片了，所以 index 对应的真实索引是 index + 1
+                const realIndex = index + 1;
+                const code = daily.weather_code[realIndex];
+                const max = Math.round(daily.temperature_2m_max[realIndex]);
+                const min = Math.round(daily.temperature_2m_min[realIndex]);
+                const dayType = getWeatherType(code);
+
+                const dateObj = new Date(timeStr);
+                const dayName = dateObj.toLocaleDateString('zh-CN', { weekday: 'short' });
+                const dateDisplay = dateObj.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' });
+                
+                const card = document.createElement('div');
+                card.className = "glass-panel min-w-[100px] p-3 rounded-xl flex flex-col items-center justify-center space-y-2 hover:bg-white/20 transition-all cursor-default";
+                card.innerHTML = `
+                    <p class="text-sm font-medium">${dayName}</p>
+                    <p class="text-xs opacity-60">${dateDisplay}</p>
+                    <i data-lucide="${dayType.icon}" class="w-8 h-8 my-1 ${dayType.color}"></i>
+                    <p class="text-sm font-bold">${max}° <span class="text-xs opacity-60 font-normal">/ ${min}°</span></p>
+                `;
+                els.forecast.appendChild(card);
+            });
+
+            // 显示内容区
+            els.mainWeather.classList.remove('hidden');
+            
+    
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('Service Worker registered', reg))
+                    .catch(err => console.log('Service Worker registration failed', err));
+            });
+        }
+    </script>
+            // 重新渲染图标
+            lucide.createIcons();
+
+            // 触发淡入动画
+            els.mainWeather.classList.remove('fade-in');
+            void els.mainWeather.offsetWidth;
+            els.mainWeather.classList.add('fade-in');
+        }
+    </script>
+</body>
+</html>
