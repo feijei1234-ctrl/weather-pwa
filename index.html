@@ -91,6 +91,40 @@
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
+
+        /* 搜索提示框样式 */
+        #suggestions {
+            animation: slideDown 0.2s ease-out;
+        }
+        
+        @keyframes slideDown {
+            from { 
+                opacity: 0; 
+                transform: translateY(-10px); 
+            }
+            to { 
+                opacity: 1; 
+                transform: translateY(0); 
+            }
+        }
+        
+        #suggestions::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        #suggestions::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+        
+        #suggestions::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 3px;
+        }
+        
+        #suggestions::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.5);
+        }
     </style>
 </head>
 <body class="flex items-center justify-center p-4">
@@ -101,10 +135,13 @@
             
             <div class="relative">
                 <input type="text" id="city-input" placeholder="输入城市 (如: 北京)" 
-                    class="glass-input w-full rounded-full py-3 pl-4 pr-12 outline-none focus:bg-white/20 transition-all">
+                    class="glass-input w-full rounded-full py-3 pl-4 pr-12 outline-none focus:bg-white/20 transition-all"
+                    autocomplete="off">
                 <button onclick="handleSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 p-2 hover:bg-white/20 rounded-full transition-colors">
                     <i data-lucide="search" class="w-5 h-5 text-white"></i>
                 </button>
+                <!-- 搜索提示下拉框 -->
+                <div id="suggestions" class="hidden absolute top-full left-0 right-0 mt-2 glass-panel rounded-2xl overflow-hidden max-h-64 overflow-y-auto z-50"></div>
             </div>
 
             <div id="loading-msg" class="hidden mt-4 text-center text-sm animate-pulse flex items-center justify-center gap-2">
@@ -172,7 +209,95 @@
     </div>
 
     <script>
-        lucide.createIcons();
+        // 等待Lucide库加载完成
+        if (typeof lucide !== 'undefined') {
+            lucide.createIcons();
+        } else {
+            window.addEventListener('load', () => {
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                }
+            });
+        }
+
+        // 中国城市拼音映射表（按人口和重要性排序）
+        const chineseCities = [
+            // 直辖市
+            { pinyin: 'beijing', name: '北京', aliases: ['bei', 'bj'] },
+            { pinyin: 'shanghai', name: '上海', aliases: ['shang', 'sh'] },
+            { pinyin: 'guangzhou', name: '广州', aliases: ['guang', 'gz'] },
+            { pinyin: 'shenzhen', name: '深圳', aliases: ['shen', 'sz'] },
+            { pinyin: 'tianjin', name: '天津', aliases: ['tian', 'tj'] },
+            { pinyin: 'chongqing', name: '重庆', aliases: ['chong', 'cq'] },
+            
+            // 省会及重要城市
+            { pinyin: 'chengdu', name: '成都', aliases: ['cheng', 'cd'] },
+            { pinyin: 'hangzhou', name: '杭州', aliases: ['hang', 'hz'] },
+            { pinyin: 'wuhan', name: '武汉', aliases: ['wu', 'wh'] },
+            { pinyin: 'xian', name: '西安', aliases: ['xi', 'xa'] },
+            { pinyin: 'nanjing', name: '南京', aliases: ['nan', 'nj'] },
+            { pinyin: 'suzhou', name: '苏州', aliases: ['su', 'suz'] },
+            { pinyin: 'qingdao', name: '青岛', aliases: ['qing', 'qd'] },
+            { pinyin: 'dalian', name: '大连', aliases: ['da', 'dl'] },
+            { pinyin: 'ningbo', name: '宁波', aliases: ['ning', 'nb'] },
+            { pinyin: 'zhengzhou', name: '郑州', aliases: ['zheng', 'zz'] },
+            { pinyin: 'changsha', name: '长沙', aliases: ['chang', 'cs'] },
+            { pinyin: 'shenyang', name: '沈阳', aliases: ['sheny', 'sy'] },
+            { pinyin: 'harbin', name: '哈尔滨', aliases: ['ha', 'heb'] },
+            { pinyin: 'jinan', name: '济南', aliases: ['ji', 'jn'] },
+            { pinyin: 'kunming', name: '昆明', aliases: ['kun', 'km'] },
+            { pinyin: 'fuzhou', name: '福州', aliases: ['fu', 'fz'] },
+            { pinyin: 'xiamen', name: '厦门', aliases: ['xia', 'xm'] },
+            { pinyin: 'hefei', name: '合肥', aliases: ['he', 'hf'] },
+            { pinyin: 'nanchang', name: '南昌', aliases: ['nanc', 'nc'] },
+            { pinyin: 'guiyang', name: '贵阳', aliases: ['gui', 'gy'] },
+            { pinyin: 'taiyuan', name: '太原', aliases: ['tai', 'ty'] },
+            { pinyin: 'shijiazhuang', name: '石家庄', aliases: ['shi', 'sjz'] },
+            { pinyin: 'nanning', name: '南宁', aliases: ['nann', 'nn'] },
+            { pinyin: 'urumqi', name: '乌鲁木齐', aliases: ['wu', 'wlmq'] },
+            { pinyin: 'lanzhou', name: '兰州', aliases: ['lan', 'lz'] },
+            { pinyin: 'yinchuan', name: '银川', aliases: ['yin', 'yc'] },
+            { pinyin: 'xining', name: '西宁', aliases: ['xin', 'xn'] },
+            { pinyin: 'hohhot', name: '呼和浩特', aliases: ['hu', 'hhht'] },
+            { pinyin: 'lhasa', name: '拉萨', aliases: ['la', 'ls'] },
+            { pinyin: 'haikou', name: '海口', aliases: ['hai', 'hk'] },
+            
+            // 其他重要城市
+            { pinyin: 'dongguan', name: '东莞', aliases: ['dong', 'dg'] },
+            { pinyin: 'foshan', name: '佛山', aliases: ['fo', 'fs'] },
+            { pinyin: 'wuxi', name: '无锡', aliases: ['wux'] },
+            { pinyin: 'changzhou', name: '常州', aliases: ['changz', 'cz'] },
+            { pinyin: 'wenzhou', name: '温州', aliases: ['wen', 'wz'] },
+            { pinyin: 'nantong', name: '南通', aliases: ['nant', 'nt'] },
+            { pinyin: 'yangzhou', name: '扬州', aliases: ['yang', 'yz'] },
+            { pinyin: 'zhuhai', name: '珠海', aliases: ['zhu', 'zh'] },
+            { pinyin: 'zhongshan', name: '中山', aliases: ['zhong', 'zs'] },
+            { pinyin: 'huizhou', name: '惠州', aliases: ['hui', 'huz'] },
+            { pinyin: 'jiangmen', name: '江门', aliases: ['jiang', 'jm'] },
+            { pinyin: 'shaoxing', name: '绍兴', aliases: ['shao', 'sx'] },
+            { pinyin: 'jinhua', name: '金华', aliases: ['jin', 'jh'] },
+            { pinyin: 'taizhou', name: '台州', aliases: ['taiz', 'tz'] },
+            { pinyin: 'yantai', name: '烟台', aliases: ['yan', 'yt'] },
+            { pinyin: 'weifang', name: '潍坊', aliases: ['wei', 'wf'] },
+            { pinyin: 'zibo', name: '淄博', aliases: ['zi', 'zb'] },
+            { pinyin: 'baoding', name: '保定', aliases: ['bao', 'bd'] },
+            { pinyin: 'tangshan', name: '唐山', aliases: ['tang', 'ts'] },
+            { pinyin: 'anshan', name: '鞍山', aliases: ['an', 'as'] },
+            { pinyin: 'luoyang', name: '洛阳', aliases: ['luo', 'ly'] },
+            { pinyin: 'changchun', name: '长春', aliases: ['changc', 'cc'] },
+            
+            // 以"上"开头的城市
+            { pinyin: 'shangrao', name: '上饶', aliases: ['shangr', 'sr'] },
+            { pinyin: 'shangqiu', name: '商丘', aliases: ['shangq', 'sq'] },
+            { pinyin: 'shantou', name: '汕头', aliases: ['shant', 'st'] },
+            { pinyin: 'shanwei', name: '汕尾', aliases: ['shanw', 'sw'] },
+            
+            // 港澳台
+            { pinyin: 'hongkong', name: '香港', aliases: ['hong', 'hk', 'xianggang'] },
+            { pinyin: 'macau', name: '澳门', aliases: ['ao', 'aomen'] },
+            { pinyin: 'taipei', name: '台北', aliases: ['taib', 'tb'] },
+            { pinyin: 'kaohsiung', name: '高雄', aliases: ['gao', 'kx'] },
+        ];
 
         const weatherTypes = {
             sunny: { codes: [0, 1], desc: "晴朗", icon: "sun", color: "text-yellow-300", bg: "linear-gradient(135deg, #f6d365 0%, #fda085 100%)" },
@@ -185,6 +310,7 @@
 
         const els = {
             input: document.getElementById('city-input'),
+            suggestions: document.getElementById('suggestions'),
             loading: document.getElementById('loading-msg'),
             error: document.getElementById('error-msg'),
             mainWeather: document.getElementById('main-weather'),
@@ -201,9 +327,196 @@
             body: document.body
         };
 
-        els.input.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') handleSearch();
+        // 防抖函数
+        let searchTimeout;
+        
+        // 统一的搜索触发函数
+        function triggerSearch(query) {
+            clearTimeout(searchTimeout);
+            
+            if (!query || query.length === 0) {
+                els.suggestions.classList.add('hidden');
+                return;
+            }
+            
+            // 防抖：等待用户停止输入500ms后再搜索（增加延迟以适应输入法）
+            searchTimeout = setTimeout(() => {
+                fetchCitySuggestions(query);
+            }, 500);
+        }
+        
+        // 输入事件监听 - 搜索提示（简化版本，兼容所有输入方式）
+        els.input.addEventListener('input', function (e) {
+            const query = e.target.value.trim();
+            triggerSearch(query);
         });
+
+        // 回车键搜索
+        els.input.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                els.suggestions.classList.add('hidden');
+                handleSearch();
+            }
+        });
+
+        // 点击外部关闭提示框
+        document.addEventListener('click', function(e) {
+            if (!els.input.contains(e.target) && !els.suggestions.contains(e.target)) {
+                els.suggestions.classList.add('hidden');
+            }
+        });
+
+        // 获取城市搜索建议
+        async function fetchCitySuggestions(query) {
+            try {
+                const lowerQuery = query.toLowerCase();
+                
+                // 1. 先从本地拼音库匹配（优先中国城市）
+                const localMatches = chineseCities.filter(city => {
+                    // 检查拼音、别名、中文名是否匹配
+                    return city.pinyin.startsWith(lowerQuery) || 
+                           city.aliases.some(alias => alias.startsWith(lowerQuery)) ||
+                           city.name.includes(query);
+                }).slice(0, 5); // 最多5个
+                
+                // 2. 如果本地匹配到结果，直接显示
+                if (localMatches.length > 0) {
+                    displayLocalSuggestions(localMatches);
+                    return;
+                }
+                
+                // 3. 如果没有本地匹配，调用API搜索
+                const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=5&language=zh&format=json`;
+                const response = await fetch(geoUrl);
+                const data = await response.json();
+                
+                if (data.results && data.results.length > 0) {
+                    displaySuggestions(data.results);
+                } else {
+                    els.suggestions.classList.add('hidden');
+                }
+            } catch (err) {
+                console.error('获取城市建议失败:', err);
+                els.suggestions.classList.add('hidden');
+            }
+        }
+
+        // 显示本地拼音匹配的建议
+        function displayLocalSuggestions(cities) {
+            els.suggestions.innerHTML = '';
+            
+            cities.forEach(city => {
+                const item = document.createElement('div');
+                item.className = 'px-4 py-3 hover:bg-white/20 cursor-pointer transition-colors flex flex-col gap-1';
+                
+                // 首字母大写的拼音
+                const capitalizedPinyin = city.pinyin.charAt(0).toUpperCase() + city.pinyin.slice(1);
+                
+                item.innerHTML = `
+                    <span class="text-white font-medium">${capitalizedPinyin} ${city.name}</span>
+                    <span class="text-white/60 text-xs">中国</span>
+                `;
+                
+                // 点击建议项
+                item.addEventListener('click', () => {
+                    els.input.value = city.name;
+                    els.suggestions.classList.add('hidden');
+                    fetchWeatherData(city.name);
+                });
+                
+                els.suggestions.appendChild(item);
+            });
+            
+            els.suggestions.classList.remove('hidden');
+        }
+
+        // 显示API搜索建议
+        function displaySuggestions(cities) {
+            els.suggestions.innerHTML = '';
+            
+            cities.forEach(city => {
+                const item = document.createElement('div');
+                item.className = 'px-4 py-3 hover:bg-white/20 cursor-pointer transition-colors flex flex-col gap-1';
+                
+                // 获取城市的多语言名称
+                const latinName = city.name || ''; // 拉丁字母名称（英文/拼音）
+                const nativeName = city.name_native || ''; // 当地语言名称
+                const countryCode = city.country_code || '';
+                
+                // 构建智能显示名称
+                let displayNames = [];
+                
+                // 1. 添加拉丁字母名称（英文优先）
+                if (latinName) {
+                    displayNames.push(latinName);
+                }
+                
+                // 2. 添加中文翻译（如果是中国城市）
+                let chineseName = '';
+                if (countryCode === 'CN' || countryCode === 'TW' || countryCode === 'HK' || countryCode === 'MO') {
+                    // 从本地城市库查找中文名
+                    const localCity = chineseCities.find(c => 
+                        c.pinyin.toLowerCase() === latinName.toLowerCase() || 
+                        c.name === latinName
+                    );
+                    if (localCity) {
+                        chineseName = localCity.name;
+                        // 如果拉丁名就是中文，不重复添加
+                        if (chineseName !== latinName) {
+                            displayNames.push(chineseName);
+                        }
+                    } else if (nativeName && !isLatin(nativeName) && nativeName !== latinName) {
+                        // 使用原生名称作为中文名
+                        chineseName = nativeName;
+                        displayNames.push(nativeName);
+                    }
+                }
+                
+                // 3. 添加当地语言名称（如果不同于已有的）
+                if (nativeName && 
+                    nativeName !== latinName && 
+                    nativeName !== chineseName && 
+                    !isLatin(nativeName)) {
+                    displayNames.push(nativeName);
+                }
+                
+                // 构建显示文本
+                const nameDisplay = displayNames.join(' ');
+                
+                // 地区信息（可选）
+                let region = city.admin1 || '';
+                if (region && (region.includes('台湾') || region.includes('Taiwan'))) {
+                    region = '';
+                } else if (region && region !== latinName) {
+                    region = `, ${region}`;
+                } else {
+                    region = '';
+                }
+                
+                const country = city.country || '';
+                
+                item.innerHTML = `
+                    <span class="text-white font-medium">${nameDisplay}${region}</span>
+                    <span class="text-white/60 text-xs">${country}</span>
+                `;
+                
+                // 点击建议项 - 使用中文名（如果有）或拉丁名
+                item.addEventListener('click', () => {
+                    els.input.value = chineseName || latinName;
+                    els.suggestions.classList.add('hidden');
+                    fetchWeatherData(chineseName || latinName);
+                });
+                
+                els.suggestions.appendChild(item);
+            });
+            
+            els.suggestions.classList.remove('hidden');
+        }
+        
+        // 检查字符串是否只包含拉丁字母、数字和常见标点
+        function isLatin(str) {
+            return /^[A-Za-z0-9\s\-',\.]+$/.test(str);
+        }
 
         window.onload = () => {
             fetchWeatherData("北京");
@@ -238,8 +551,9 @@
                     throw new Error("未找到该城市，请检查拼写。");
                 }
 
-                const { latitude, longitude, name, admin1 } = geoData.results[0];
-                const displayName = admin1 ? `${name} (${admin1})` : name;
+                const { latitude, longitude, name, admin1, country } = geoData.results[0];
+                // 只显示城市名，避免显示错误的省份信息
+                const displayName = name;
 
                 const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_direction_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto`;
                 
